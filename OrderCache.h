@@ -2,6 +2,7 @@
 
 #include <string>
 #include <vector>
+#include <unordered_map>
 
 class Order
 {
@@ -94,6 +95,6 @@ class OrderCache : public OrderCacheInterface
 
  private:
 
-   // Todo...
+    std::unordered_map<std::string, Order> m_orders;
 
 };
