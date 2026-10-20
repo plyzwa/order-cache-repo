@@ -1,0 +1,22 @@
+# Build artifacts & Binaries
+build/
+bin/
+*.o
+*.obj
+*.exe
+OrderCacheTest
+OrderCacheTest_debug
+OrderCacheTest_optimized
+
+# IDE / Editor configuration
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# CMake generated files
+CMakeFiles/
+CMakeCache.txt
+cmake_install.cmake
+Makefile
+CTestTestfile.cmake
