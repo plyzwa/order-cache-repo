@@ -3,6 +3,9 @@
 #include <string>
 #include <vector>
 #include <chrono>
+#include <thread>
+#include <future>
+#include <atomic>
 
 #include "OrderCache.h"
 #include "gtest/gtest.h"
@@ -355,6 +358,99 @@ TEST_F(OrderCacheTest, Benchmark_QueryLatencyUnderHeavyLoad)
 
     // O(K) query over 3 companies should complete in well under 100 microseconds
     EXPECT_LT(durationNs, 100'000); 
+}
+
+// ====================================== PHASE 4 STEP6 ======================================
+
+TEST_F(OrderCacheTest, Concurrency_ConcurrentWritersDisjointKeys)
+{
+    constexpr unsigned int kNumThreads = 8;
+    constexpr unsigned int kOrdersPerThread = 1000;
+    std::vector<std::thread> threads;
+    threads.reserve(kNumThreads);
+
+    for (unsigned int t = 0; t < kNumThreads; ++t)
+    {
+        threads.emplace_back([this, t]() {
+            for (int i = 0; i < kOrdersPerThread; ++i)
+            {
+                const std::string ordId = "T" + std::to_string(t) + "_Ord_" + std::to_string(i);
+                cache.addOrder(Order{ordId, "SecConcurrent", "Buy", 10, "User" + std::to_string(t), "Comp" + std::to_string(t)});
+            }
+        });
+    }
+
+    for (auto& th : threads) {
+        th.join();
+    }
+
+    EXPECT_EQ(cache.getAllOrders().size(), kNumThreads * kOrdersPerThread);
+}
+
+TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
+{
+    constexpr unsigned int kWriters = 4;
+    constexpr unsigned int kReaders = 4;
+    constexpr unsigned int kOpsPerWriter = 500;
+    std::atomic<bool> startFlag{false};
+    std::atomic<bool> stopReaders{false};
+
+    std::vector<std::thread> writers;
+    std::vector<std::thread> readers;
+
+    // Launch writer threads
+    for (unsigned int w = 0; w < kWriters; ++w)
+    {
+        writers.emplace_back([this, &startFlag, w]() {
+            while (!startFlag.load()) { std::this_thread::yield(); }
+
+            for (int i = 0; i < kOpsPerWriter; ++i)
+            {
+                const std::string id = "RW_" + std::to_string(w) + "_" + std::to_string(i);
+                const std::string side = (i % 2 == 0) ? "Buy" : "Sell";
+                cache.addOrder(Order{id, "SecShared", side, 100, "User" + std::to_string(w), "Comp" + std::to_string(w)});
+                
+                if (i % 10 == 0)
+                {
+                    cache.cancelOrder(id);
+                }
+            }
+        });
+    }
+
+    // Launch reader threads
+    for (unsigned int r = 0; r < kReaders; ++r)
+    {
+        readers.emplace_back([this, &startFlag, &stopReaders]() {
+            while (!startFlag.load()) { std::this_thread::yield(); }
+
+            while (!stopReaders.load())
+            {
+                // Concurrently query matching size and snapshots
+                cache.getMatchingSizeForSecurity("SecShared");
+                cache.getAllOrders();
+            }
+        });
+    }
+
+    // Release all threads simultaneously
+    startFlag.store(true);
+
+    for (auto& w : writers)
+    {
+        w.join();
+    }
+
+    stopReaders.store(true);
+
+    for (auto& r : readers)
+    {
+        r.join();
+    }
+
+    // Verify system state remains intact and queryable
+    EXPECT_NO_THROW(cache.getMatchingSizeForSecurity("SecShared"));
+    EXPECT_NO_THROW(cache.getAllOrders());
 }
 
 
