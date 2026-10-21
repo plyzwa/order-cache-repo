@@ -18,6 +18,29 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # --- Install Dependencies per OS ---
+    - name: Install Dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtest-dev cmake
+        cd /usr/src/googletest
+        sudo cmake .
+        sudo cmake --build . --target install
+
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'MacOS'
+      run: |
+        brew install googletest
+
+    - name: Install Dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        vcpkg install gtest:x64-windows
+      # Note: windows-latest has vcpkg pre-installed, or CMake can find it via toolchains if needed. 
+      # Alternatively, NuGet can be used, but let's configure CMake.
+
+    # --- Build & Test ---
     - name: Configure CMake
       run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
 
