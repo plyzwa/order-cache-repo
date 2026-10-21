@@ -371,7 +371,7 @@ TEST_F(OrderCacheTest, Concurrency_ConcurrentWritersDisjointKeys)
 
     for (unsigned int t = 0; t < kNumThreads; ++t)
     {
-        threads.emplace_back([this, t]() {
+        threads.emplace_back([this, t, kOrdersPerThread]() {
             for (unsigned int i = 0; i < kOrdersPerThread; ++i)
             {
                 const std::string ordId = "T" + std::to_string(t) + "_Ord_" + std::to_string(i);
@@ -380,7 +380,8 @@ TEST_F(OrderCacheTest, Concurrency_ConcurrentWritersDisjointKeys)
         });
     }
 
-    for (auto& th : threads) {
+    for (auto& th : threads)
+    {
         th.join();
     }
 
@@ -401,7 +402,7 @@ TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
     // Launch writer threads
     for (unsigned int w = 0; w < kWriters; ++w)
     {
-        writers.emplace_back([this, &startFlag, w]() {
+        writers.emplace_back([this, &startFlag, w, kOpsPerWriter]() {
             while (!startFlag.load()) { std::this_thread::yield(); }
 
             for (unsigned int i = 0; i < kOpsPerWriter; ++i)
