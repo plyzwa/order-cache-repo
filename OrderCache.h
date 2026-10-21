@@ -3,7 +3,7 @@
 #include <string>
 #include <vector>
 #include <unordered_map>
-
+#include <shared_mutex>
 
 
 class Order
@@ -116,5 +116,7 @@ class OrderCache : public OrderCacheInterface
 
     void updateAggregateAdd(const Order& order);
     void updateAggregateRemove(const Order& order);
+
+    mutable std::shared_mutex m_mutex;
 
 };

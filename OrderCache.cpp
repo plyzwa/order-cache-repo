@@ -3,6 +3,7 @@
 #include <vector>
 #include <algorithm>
 #include <string_view>
+#include <mutex>
 
 
 constexpr std::string_view BUY{"Buy"};
@@ -25,6 +26,8 @@ static bool isValid(const Order& order)
 
 void OrderCache::addOrder(Order order)
 {
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+
     // It is better to have isValid to be first to improve performance
     if (isValid(order) && m_orders.find(order.orderId()) == m_orders.end() ) 
     {
@@ -35,6 +38,8 @@ void OrderCache::addOrder(Order order)
 
 void OrderCache::cancelOrder(const std::string& orderId)
 {
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+
     const auto it = m_orders.find(orderId);
     if (it != m_orders.end())
     {
@@ -42,12 +47,13 @@ void OrderCache::cancelOrder(const std::string& orderId)
         m_orders.erase(it);
     }
 
-    
 }
 
 void OrderCache::cancelOrdersForUser(const std::string& user)
 {
     if (user.empty()) return;
+
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
 
     for (auto it = m_orders.begin(); it != m_orders.end() ; )
     {
@@ -68,6 +74,8 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
     if (securityId.empty()) return;
     if(minQty == 0) return;
 
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+
     for (auto it = m_orders.begin(); it != m_orders.end() ; )
     {
         if (it->second.securityId() == securityId &&  it->second.qty() >= minQty)
@@ -85,6 +93,8 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
 unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityId)
 {
     if (securityId.empty()) return 0;
+
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
 
     const auto itSecurity = m_securityAggregates.find(securityId);
     if (itSecurity == m_securityAggregates.end()) return 0;
@@ -109,6 +119,8 @@ unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityI
 
 std::vector<Order> OrderCache::getAllOrders() const
 {
+    std::shared_lock<std::shared_mutex> lock(m_mutex);
+
     std::vector<Order> result;
 
     result.reserve(m_orders.size());
