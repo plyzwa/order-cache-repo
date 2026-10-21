@@ -8,6 +8,7 @@
 #include <iostream>
 
 #include "OrderCache.h"
+#include "OrderCacheHelpers.h"
 #include "gtest/gtest.h"
 
 class OrderCacheTest : public ::testing::Test
@@ -541,6 +542,79 @@ TEST_F(OrderCacheTest, OverflowProtection_HandlesLargeInstitutionalVolumesWithou
     // Verifies internal 64-bit accumulators do not overflow during outsideBuys + outsideSells.
     EXPECT_EQ(cache.getMatchingSizeForSecurity("CorpBond10Y"), 3'000'000'000U);
 }
+
+// ====================================== PHASE 6 STEP8 (PROTOBUF) ======================================
+
+TEST_F(OrderCacheTest, ProtobufSerializationRoundTrip)
+{
+    Order original{"Ord123", "Sec456", "Buy", 1000, "TraderJoe", "FirmA"};
+
+    const std::string serialized = Protobuff::serializeOrder(original);
+    const Order restored = Protobuff::deserializeOrder(serialized);
+
+    EXPECT_EQ(restored.orderId(), original.orderId());
+    EXPECT_EQ(restored.securityId(), original.securityId());
+    EXPECT_EQ(restored.side(), original.side());
+    EXPECT_EQ(restored.qty(), original.qty());
+    EXPECT_EQ(restored.user(), original.user());
+    EXPECT_EQ(restored.company(), original.company());
+}
+
+TEST_F(OrderCacheTest, ProtobufSerialization_EdgeCasesAndSpecialCharacters)
+{
+    // Test with maximum 32-bit quantity, long strings, and special characters
+    Order original
+    {
+        "Ord_999999", 
+        "USD/EUR-10Y", 
+        "Sell", 
+        std::numeric_limits<unsigned int>::max(),
+        "Trader.Smith#1", 
+        "Global-Trading & Co."
+    };
+
+    const std::string binaryBlob = Protobuff::serializeOrder(original);
+    ASSERT_FALSE(binaryBlob.empty());
+
+    const Order restored = Protobuff::deserializeOrder(binaryBlob);
+
+    EXPECT_EQ(restored.orderId(), original.orderId());
+    EXPECT_EQ(restored.securityId(), original.securityId());
+    EXPECT_EQ(restored.side(), original.side());
+    EXPECT_EQ(restored.qty(), original.qty());
+    EXPECT_EQ(restored.user(), original.user());
+    EXPECT_EQ(restored.company(), original.company());
+}
+
+TEST_F(OrderCacheTest, ProtobufDeserialization_MalformedWireFormatThrows)
+{
+    // Wire type 7 is invalid in protobuf: forces ParseFromString to return false
+    const std::string invalidWireTypeBlob = "\xFF\xFF\xFF\x01\x02\x03malformed";
+    EXPECT_THROW(Protobuff::deserializeOrder(invalidWireTypeBlob), std::runtime_error);
+
+    // Truncated length-delimited field: tag claims 20 bytes follow, but buffer ends abruptly
+    const std::string truncatedLengthDelimited = "\x0A\x14\x01\x02";
+    EXPECT_THROW(Protobuff::deserializeOrder(truncatedLengthDelimited), std::runtime_error);
+
+    // Truncated varint: tag 0x20 (field 4, wire type 0) followed by 0x80 (continuation bit set) but ends at EOF
+    const std::string truncatedVarint = "\x20\x80";
+    EXPECT_THROW(Protobuff::deserializeOrder(truncatedVarint), std::runtime_error);
+}
+
+TEST_F(OrderCacheTest, ProtobufDeserialization_EmptyPayloadYieldsDefaultOrder)
+{
+    const std::string emptyBlob;
+    const Order defaultOrder = Protobuff::deserializeOrder(emptyBlob);
+
+    EXPECT_TRUE(defaultOrder.orderId().empty());
+    EXPECT_TRUE(defaultOrder.securityId().empty());
+    EXPECT_EQ(defaultOrder.qty(), 0U);
+    EXPECT_EQ(defaultOrder.side(), "Unspecified");
+}
+
+
+
+
 
 
 int main(int argc, char **argv)

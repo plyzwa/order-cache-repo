@@ -19,7 +19,6 @@ if(CMAKE_BUILD_TYPE STREQUAL "Release")
   endif()
 endif()
 
-
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   if(ENABLE_TSAN)
     add_compile_options(-fsanitize=thread -g -O1)
@@ -30,7 +29,6 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
-
 # Find Google Test package
 find_package(GTest REQUIRED)
 include_directories(${GTEST_INCLUDE_DIRS})
@@ -38,19 +36,31 @@ include_directories(${GTEST_INCLUDE_DIRS})
 # Add thread support (needed for Google Test)
 find_package(Threads REQUIRED)
 
+# Find Protobuf
+find_package(Protobuf REQUIRED)
+include_directories(${Protobuf_INCLUDE_DIRS})
+include_directories(${CMAKE_CURRENT_BINARY_DIR})
+
+# Generate C++ sources from protos/order.proto
+protobuf_generate_cpp(PROTO_SRCS PROTO_HDRS protos/order.proto)
+
 # Source files
 set(SOURCES
     OrderCache.cpp
     OrderCacheTest.cpp
+    OrderCacheHelpers.cpp
+    ${PROTO_SRCS}
+    ${PROTO_HDRS}
 )
 
 # Add the executable
 add_executable(OrderCacheTest ${SOURCES})
 
-# Link against Google Test and pthread
+# Link against Google Test, Threads, and Protobuf
 target_link_libraries(OrderCacheTest
     ${GTEST_BOTH_LIBRARIES}
     Threads::Threads
+    ${Protobuf_LIBRARIES}
 )
 
 # Enable testing
@@ -65,3 +75,4 @@ message(STATUS "CMake version: ${CMAKE_VERSION}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
 message(STATUS "Google Test found: ${GTEST_FOUND}")
+message(STATUS "Protobuf found: ${Protobuf_FOUND}")
