@@ -1,7 +1,12 @@
-// Todo: your implementation of the OrderCache...
 #include "OrderCache.h"
-#include <vector>
 
+#include <vector>
+#include <algorithm>
+#include <string_view>
+
+
+constexpr std::string_view BUY{"Buy"};
+constexpr std::string_view SELL{"Sell"};
 
 static bool isValid(const Order& order)
 {
@@ -15,7 +20,7 @@ static bool isValid(const Order& order)
         return false;
     }
     
-    return order.side() == "Buy" || order.side() == "Sell";
+    return order.side() == BUY || order.side() == SELL;
 }
 
 void OrderCache::addOrder(Order order)
@@ -61,10 +66,66 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
     }
 }
 
+struct MatchingCandidate
+{
+    std::string company;
+    unsigned int remainingQty;
+
+    MatchingCandidate(const std::string& company, const unsigned int remainingQty)
+     : company(company), remainingQty(remainingQty)
+     {}
+};
+
+
 unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityId)
 {
-    return 0; // TODO
+    unsigned int matched{0};
+
+    std::vector<MatchingCandidate> buyOrders;
+    std::vector<MatchingCandidate> sellOrders;
+
+
+    // Collecting Buy and Sell order
+    for (const auto& order : m_orders)
+    {
+        if (order.second.securityId() == securityId)
+        {
+            if (order.second.side() == BUY)
+            {
+                buyOrders.emplace_back(order.second.company(), order.second.qty() );
+            }
+            else
+            {
+                sellOrders.emplace_back(order.second.company(), order.second.qty() );
+            }
+        }
+    }
+
+    // Matching algorithm
+    for (auto& currentBuy : buyOrders)
+    {
+        if (currentBuy.remainingQty == 0) continue;
+
+        for (auto& currentSell : sellOrders)
+        {
+            // Constrains from the documentation
+            if (currentSell.remainingQty == 0) continue;
+            if (currentBuy.company == currentSell.company) continue;
+
+            unsigned int matchQty = std::min(currentBuy.remainingQty, currentSell.remainingQty);
+
+            matched += matchQty;
+            currentBuy.remainingQty -= matchQty;
+            currentSell.remainingQty -= matchQty;
+
+             // If remaining Buy drops to d not waste processor time and skip loop to the begginig
+            if (currentBuy.remainingQty == 0) break;
+        }
+    }
+
+    return matched;
 }
+
 
 std::vector<Order> OrderCache::getAllOrders() const
 {

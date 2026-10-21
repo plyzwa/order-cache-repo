@@ -17,14 +17,14 @@ protected:
     }
 };
 
-// =================== PHASE 1 STEP0 =================== 
+// ====================================== PHASE 1 STEP0 ======================================
 TEST_F(OrderCacheTest, ExampleAddOrder)
 {
     cache.addOrder(Order{"OrdId1", "SecId1", "Buy", 1000, "User1", "CompanyA"});
     ASSERT_EQ(cache.getAllOrders().size(), 1);
 }
 
-// =================== PHASE 1 STEP1 =================== 
+// ====================================== PHASE 1 STEP1 ======================================
 TEST_F(OrderCacheTest, AddAndRetrieveSingleOrder)
 {
     cache.addOrder(Order{"OrdId1", "SecId1", "Buy", 1000, "User1", "CompanyA"});
@@ -61,7 +61,7 @@ TEST_F(OrderCacheTest, CancelNonExistingOrder)
     ASSERT_EQ(cache.getAllOrders().size(), 3);
 }
 
-// =================== PHASE 1 STEP2 =================== 
+// ====================================== PHASE 1 STEP2 ======================================
 
 TEST_F(OrderCacheTest, CancelOrdersForUser_RemovesOnlyTargetUser)
 {
@@ -111,12 +111,94 @@ TEST_F(OrderCacheTest, CancelOrdersForSecIdWithMinimumQty_FiltersCorrectly)
     EXPECT_TRUE(foundOrd4);
 }
 
-TEST_F(OrderCacheTest, CancelOrdersForSecIdWithMinimumQty_NonExistentSecurityIsNoOp) {
+TEST_F(OrderCacheTest, CancelOrdersForSecIdWithMinimumQty_NonExistentSecurityIsNoOp)
+{
     cache.addOrder(Order{"Ord1", "SecA", "Buy", 100, "User1", "Comp1"});
     
     EXPECT_NO_THROW(cache.cancelOrdersForSecIdWithMinimumQty("SecUnknown", 50));
     EXPECT_EQ(cache.getAllOrders().size(), 1);
 }
+
+// ====================================== PHASE 2 STEP3 =================== ===================
+
+TEST_F(OrderCacheTest, Matching_ReadmeExample1)
+{
+    cache.addOrder(Order{"OrdId1", "SecId1", "Buy",  1000, "User1", "CompanyA"});
+    cache.addOrder(Order{"OrdId2", "SecId2", "Sell", 3000, "User2", "CompanyB"});
+    cache.addOrder(Order{"OrdId3", "SecId1", "Sell",  500, "User3", "CompanyA"});
+    cache.addOrder(Order{"OrdId4", "SecId2", "Buy",   600, "User4", "CompanyC"});
+    cache.addOrder(Order{"OrdId5", "SecId2", "Buy",   100, "User5", "CompanyB"});
+    cache.addOrder(Order{"OrdId6", "SecId3", "Buy",  1000, "User6", "CompanyD"});
+    cache.addOrder(Order{"OrdId7", "SecId2", "Buy",  2000, "User7", "CompanyE"});
+    cache.addOrder(Order{"OrdId8", "SecId2", "Sell", 5000, "User8", "CompanyE"});
+
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId1"), 0);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId2"), 2700);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId3"), 0);
+
+    EXPECT_EQ(cache.getAllOrders().size(), 8);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId2"), 2700);
+}
+
+TEST_F(OrderCacheTest, Matching_ReadmeExample2)
+{
+    cache.addOrder(Order{"OrdId1",  "SecId1", "Sell",  100, "User10", "Company2"});
+    cache.addOrder(Order{"OrdId2",  "SecId3", "Sell",  200, "User8",  "Company2"});
+    cache.addOrder(Order{"OrdId3",  "SecId1", "Buy",   300, "User13", "Company2"});
+    cache.addOrder(Order{"OrdId4",  "SecId2", "Sell",  400, "User12", "Company2"});
+    cache.addOrder(Order{"OrdId5",  "SecId3", "Sell",  500, "User7",  "Company2"});
+    cache.addOrder(Order{"OrdId6",  "SecId3", "Buy",   600, "User3",  "Company1"});
+    cache.addOrder(Order{"OrdId7",  "SecId1", "Sell",  700, "User10", "Company2"});
+    cache.addOrder(Order{"OrdId8",  "SecId1", "Sell",  800, "User2",  "Company1"});
+    cache.addOrder(Order{"OrdId9",  "SecId2", "Buy",   900, "User6",  "Company2"});
+    cache.addOrder(Order{"OrdId10", "SecId2", "Sell", 1000, "User5",  "Company1"});
+    cache.addOrder(Order{"OrdId11", "SecId1", "Sell", 1100, "User13", "Company2"});
+    cache.addOrder(Order{"OrdId12", "SecId2", "Buy",  1200, "User9",  "Company2"});
+    cache.addOrder(Order{"OrdId13", "SecId1", "Sell", 1300, "User1",  "Company1"});
+
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId1"), 300);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId2"), 1000);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId3"), 600);
+}
+
+TEST_F(OrderCacheTest, Matching_ReadmeExample3)
+{
+    cache.addOrder(Order{"OrdId1",  "SecId3", "Sell",  100, "User1", "Company1"});
+    cache.addOrder(Order{"OrdId2",  "SecId3", "Sell",  200, "User3", "Company2"});
+    cache.addOrder(Order{"OrdId3",  "SecId1", "Buy",   300, "User2", "Company1"});
+    cache.addOrder(Order{"OrdId4",  "SecId3", "Sell",  400, "User5", "Company2"});
+    cache.addOrder(Order{"OrdId5",  "SecId2", "Sell",  500, "User2", "Company1"});
+    cache.addOrder(Order{"OrdId6",  "SecId2", "Buy",   600, "User3", "Company2"});
+    cache.addOrder(Order{"OrdId7",  "SecId2", "Sell",  700, "User1", "Company1"});
+    cache.addOrder(Order{"OrdId8",  "SecId1", "Sell",  800, "User2", "Company1"});
+    cache.addOrder(Order{"OrdId9",  "SecId1", "Buy",   900, "User5", "Company2"});
+    cache.addOrder(Order{"OrdId10", "SecId1", "Sell", 1000, "User1", "Company1"});
+    cache.addOrder(Order{"OrdId11", "SecId2", "Sell", 1100, "User6", "Company2"});
+
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId1"), 900);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId2"), 600);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId3"), 0);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 int main(int argc, char **argv) {
     ::testing::InitGoogleTest(&argc, argv);
