@@ -64,5 +64,10 @@ jobs:
     - name: Build Project
       run: cmake --build build --config Release
 
-    - name: Run Google Tests
+    - name: Run Google Tests (Linux / macOS)
+      if: runner.os != 'Windows'
       run: ctest --test-dir build --output-on-failure
+
+    - name: Run Google Tests (Windows)
+      if: runner.os == 'Windows'
+      run: ctest --test-dir build --config Release --output-on-failure
