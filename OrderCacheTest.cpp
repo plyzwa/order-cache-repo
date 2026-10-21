@@ -612,7 +612,107 @@ TEST_F(OrderCacheTest, ProtobufDeserialization_EmptyPayloadYieldsDefaultOrder)
     EXPECT_EQ(defaultOrder.side(), "Unspecified");
 }
 
+// ====================================== PHASE7 STEP9 : FLATBUFFERS ======================================
 
+TEST_F(OrderCacheTest, FlatBuffers_RoundTripParity)
+{
+    const Order original{"Ord_FB101", "Sec_NVDA", "Buy", 7500, "TraderAlpha", "PropFirmX"};
+
+    // 1. Serialize domain order to FlatBuffers byte vector
+    const auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(original);
+    ASSERT_FALSE(buffer.empty());
+
+    // 2. Materialize back to domain Order
+    const Order restored = FlatBuff::OrderFlatBufferAdapter::deserialize(buffer.data(), buffer.size());
+
+    // 3. Verify exact field equality
+    EXPECT_EQ(restored.orderId(), original.orderId());
+    EXPECT_EQ(restored.securityId(), original.securityId());
+    EXPECT_EQ(restored.side(), original.side());
+    EXPECT_EQ(restored.qty(), original.qty());
+    EXPECT_EQ(restored.user(), original.user());
+    EXPECT_EQ(restored.company(), original.company());
+}
+
+TEST_F(OrderCacheTest, FlatBuffers_ZeroCopyDirectInspection)
+{
+    const Order original{"Ord_ZC99", "Sec_MSFT", "Sell", 25000, "DeskUser4", "Citadel"};
+    const auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(original);
+
+    // Direct zero-copy traversal into the contiguous buffer
+    const auto* flatOrder = FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(buffer.data(), buffer.size());
+    ASSERT_NE(flatOrder, nullptr);
+
+    // Zero-allocation field inspection via std::string_view
+    EXPECT_EQ(flatOrder->order_id()->string_view(), "Ord_ZC99");
+    EXPECT_EQ(flatOrder->security_id()->string_view(), "Sec_MSFT");
+    EXPECT_EQ(flatOrder->qty(), 25000U);
+    EXPECT_EQ(flatOrder->user()->string_view(), "DeskUser4");
+    EXPECT_EQ(flatOrder->company()->string_view(), "Citadel");
+    EXPECT_EQ(FlatBuff::OrderFlatBufferAdapter::fromFbsSide(flatOrder->side()), "Sell");
+}
+
+TEST_F(OrderCacheTest, FlatBuffers_RejectsCorruptedAndTruncatedBuffers)
+{
+    const Order original{"Ord_Trunc", "Sec_AAPL", "Buy", 100, "User1", "CompA"};
+    auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(original);
+
+    // 1. Null / zero-sized buffer validation
+    EXPECT_THROW(FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(nullptr, 0), std::invalid_argument);
+    EXPECT_THROW(FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(buffer.data(), 0), std::invalid_argument);
+
+    // 2. Truncated buffer validation (cutting buffer in half)
+    const size_t truncatedSize = buffer.size() / 2;
+    EXPECT_THROW(
+        FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(buffer.data(), truncatedSize),
+        std::runtime_error
+    );
+
+    // 3. Corrupted payload validation (scrambling root table offset)
+    std::vector<uint8_t> corruptedBuffer = buffer;
+    for (size_t i = 0; i < std::min<size_t>(8, corruptedBuffer.size()); ++i)
+    {
+        corruptedBuffer[i] = 0xFF;
+    }
+    EXPECT_THROW(
+        FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(corruptedBuffer.data(), corruptedBuffer.size()),
+        std::runtime_error
+    );
+}
+
+TEST_F(OrderCacheTest, FlatBuffers_BoundaryValuesAndMaxQuantity)
+{
+    // Test unsigned 32-bit integer limits
+    constexpr unsigned int kMaxQty = std::numeric_limits<unsigned int>::max();
+    const Order maxOrder{"Ord_MaxLimit", "Sec_BOND", "Sell", kMaxQty, "TreasuryDesk", "FedBroker"};
+
+    const auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(maxOrder);
+    const Order restored = FlatBuff::OrderFlatBufferAdapter::deserialize(buffer.data(), buffer.size());
+
+    EXPECT_EQ(restored.qty(), kMaxQty);
+    EXPECT_EQ(restored.side(), "Sell");
+}
+
+TEST_F(OrderCacheTest, Serialization_ProtobufAndFlatBuffersParity)
+{
+    const Order sourceOrder{"Dual_001", "Sec_TSLA", "Buy", 4200, "Elon", "SpaceX"};
+
+    // Serialize through Protobuf
+    const std::string protoWire = Protobuff::serializeOrder(sourceOrder);
+    const Order protoRestored = Protobuff::deserializeOrder(protoWire);
+
+    // Serialize through FlatBuffers
+    const auto fbsWire = FlatBuff::OrderFlatBufferAdapter::serialize(sourceOrder);
+    const Order fbsRestored = FlatBuff::OrderFlatBufferAdapter::deserialize(fbsWire.data(), fbsWire.size());
+
+    // Both codecs must output identical domain orders
+    EXPECT_EQ(protoRestored.orderId(), fbsRestored.orderId());
+    EXPECT_EQ(protoRestored.securityId(), fbsRestored.securityId());
+    EXPECT_EQ(protoRestored.side(), fbsRestored.side());
+    EXPECT_EQ(protoRestored.qty(), fbsRestored.qty());
+    EXPECT_EQ(protoRestored.user(), fbsRestored.user());
+    EXPECT_EQ(protoRestored.company(), fbsRestored.company());
+}
 
 
 
