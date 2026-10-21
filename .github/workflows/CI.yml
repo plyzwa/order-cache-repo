@@ -1,0 +1,73 @@
+name: Cross-Platform CI
+
+on:
+  push:
+    branches: [ "**" ]
+  pull_request:
+    branches: [ "**" ]
+
+jobs:
+  build-and-test:
+    name: Build & Test (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-latest]
+
+    steps:
+    - uses: actions/checkout@v4
+
+    # --- Cache vcpkg artifacts on Windows ---
+    - name: Restore vcpkg artifacts
+      if: runner.os == 'Windows'
+      uses: actions/cache@v4
+      with:
+        path: |
+          C:/vcpkg/installed
+          C:/vcpkg/packages
+          ~/.cache/vcpkg
+        key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+        restore-keys: |
+          vcpkg-windows-
+
+    # --- Install Dependencies per OS ---
+    - name: Install Dependencies (Ubuntu)
+      if: runner.os == 'Linux'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libgtest-dev cmake
+        cd /usr/src/googletest
+        sudo cmake .
+        sudo cmake --build . --target install
+
+    - name: Install Dependencies (macOS)
+      if: runner.os == 'macOS'
+      run: |
+        brew install googletest
+
+    - name: Install Dependencies (Windows)
+      if: runner.os == 'Windows'
+      run: |
+        vcpkg install gtest:x64-windows
+
+    # --- Configure CMake (Conditional Toolchain for Windows) ---
+    - name: Configure CMake (Linux / macOS)
+      if: runner.os != 'Windows'
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+
+    - name: Configure CMake (Windows)
+      if: runner.os == 'Windows'
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
+
+    # --- Build & Test ---
+    - name: Build Project
+      run: cmake --build build --config Release
+
+    - name: Run Google Tests (Linux / macOS)
+      if: runner.os != 'Windows'
+      run: ctest --test-dir build --output-on-failure
+
+    - name: Run Google Tests (Windows)
+      if: runner.os == 'Windows'
+      run: ctest --test-dir build -C Release --output-on-failure
