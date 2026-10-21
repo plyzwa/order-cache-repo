@@ -4,8 +4,8 @@
 #include <vector>
 #include <chrono>
 #include <thread>
-#include <future>
 #include <atomic>
+#include <iostream>
 
 #include "OrderCache.h"
 #include "gtest/gtest.h"
@@ -372,7 +372,7 @@ TEST_F(OrderCacheTest, Concurrency_ConcurrentWritersDisjointKeys)
     for (unsigned int t = 0; t < kNumThreads; ++t)
     {
         threads.emplace_back([this, t]() {
-            for (int i = 0; i < kOrdersPerThread; ++i)
+            for (unsigned int i = 0; i < kOrdersPerThread; ++i)
             {
                 const std::string ordId = "T" + std::to_string(t) + "_Ord_" + std::to_string(i);
                 cache.addOrder(Order{ordId, "SecConcurrent", "Buy", 10, "User" + std::to_string(t), "Comp" + std::to_string(t)});
@@ -404,7 +404,7 @@ TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
         writers.emplace_back([this, &startFlag, w]() {
             while (!startFlag.load()) { std::this_thread::yield(); }
 
-            for (int i = 0; i < kOpsPerWriter; ++i)
+            for (unsigned int i = 0; i < kOpsPerWriter; ++i)
             {
                 const std::string id = "RW_" + std::to_string(w) + "_" + std::to_string(i);
                 const std::string side = (i % 2 == 0) ? "Buy" : "Sell";
@@ -458,37 +458,48 @@ TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
 TEST_F(OrderCacheTest, Scale_OneMillionOrdersStressBenchmark)
 {
     constexpr unsigned int kTotalOrders = 1'000'000;
-    std::cout << "\n>>> [1M ORDERS BENCHMARK] Ingesting " << kTotalOrders << " orders...\n";
+    std::cout << "\n>>> [1M ORDERS BENCHMARK] Preparing " << kTotalOrders << " orders in memory...\n";
 
-    const auto ingestStart = std::chrono::high_resolution_clock::now();
+    // Step 1: Pre-generate orders outside the timer so string allocations aren't measured
+    std::vector<Order> ordersToInject;
+    ordersToInject.reserve(kTotalOrders);
 
     for (unsigned int i = 0; i < kTotalOrders; ++i)
     {
         const std::string id = "Ord1M_" + std::to_string(i);
-        // Distribute across 5 securities
         const std::string sec = "Sec_" + std::to_string(i % 5);
+        const std::string user = "User_" + std::to_string(i % 100);
 
         if (i % 2 == 0)
         {
-            cache.addOrder(Order{id, sec, "Buy", 10, "User" + std::to_string(i % 100), "CompA"});
+            ordersToInject.emplace_back(id, sec, "Buy", 10, user, "CompA");
         }
         else if (i % 4 == 1)
         {
-            cache.addOrder(Order{id, sec, "Sell", 10, "User" + std::to_string(i % 100), "CompB"});
+            ordersToInject.emplace_back(id, sec, "Sell", 10, user, "CompB");
         }
         else
         {
-            cache.addOrder(Order{id, sec, "Sell", 10, "User" + std::to_string(i % 100), "CompC"});
+            ordersToInject.emplace_back(id, sec, "Sell", 10, user, "CompC");
         }
+    }
+
+    std::cout << ">>> Ingesting pre-allocated orders into OrderCache...\n";
+    const auto ingestStart = std::chrono::high_resolution_clock::now();
+
+    // Step 2: Measure ONLY the cache insertion throughput
+    for (auto& order : ordersToInject)
+    {
+        cache.addOrder(std::move(order));
     }
 
     const auto ingestEnd = std::chrono::high_resolution_clock::now();
     const auto ingestDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(ingestEnd - ingestStart).count();
 
-    std::cout << ">>> Ingestion completed in: " << ingestDurationMs << " ms ("
+    std::cout << ">>> Pure Cache Ingestion completed in: " << ingestDurationMs << " ms ("
               << (kTotalOrders * 1000.0) / (ingestDurationMs > 0 ? ingestDurationMs : 1) << " ops/sec)\n";
 
-    // Benchmark query latency against Sec_0 (contains 200,000 orders: 100k Buys from CompA, 50k Sells CompB, 50k Sells CompC)
+    // Step 3: Benchmark isolated query latency against Sec_0
     const auto queryStart = std::chrono::high_resolution_clock::now();
     const unsigned int matched = cache.getMatchingSizeForSecurity("Sec_0");
     const auto queryEnd = std::chrono::high_resolution_clock::now();
@@ -498,43 +509,13 @@ TEST_F(OrderCacheTest, Scale_OneMillionOrdersStressBenchmark)
     std::cout << ">>> Query getMatchingSizeForSecurity(\"Sec_0\") completed in: "
               << queryDurationNs << " ns (" << queryDurationNs / 1'000.0 << " us)\n";
 
-    // 100,000 buys of 10 = 1,000,000 qty from CompA
-    // 50,000 sells of 10 = 500,000 qty from CompB
-    // 50,000 sells of 10 = 500,000 qty from CompC
-    // Total outside sells = 1,000,000. Matched volume must equal 1,000,000.
     EXPECT_EQ(matched, 1'000'000);
-
-    // Latency constraint: query over 3 companies must be strictly under 50 microseconds
     EXPECT_LT(queryDurationNs, 50'000);
 }
 
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-int main(int argc, char **argv) {
+int main(int argc, char **argv)
+{
     ::testing::InitGoogleTest(&argc, argv);
     return RUN_ALL_TESTS();
 }

@@ -26,18 +26,21 @@ static bool isValid(const Order& order)
 
 void OrderCache::addOrder(Order order)
 {
+    // It is better to have isValid to be first to improve performance
+    if (isValid(order) == false) return;
     std::unique_lock<std::shared_mutex> lock(m_mutex);
 
-    // It is better to have isValid to be first to improve performance
-    if (isValid(order) && m_orders.find(order.orderId()) == m_orders.end() ) 
+    if (m_orders.find(order.orderId()) == m_orders.end() ) 
     {
         updateAggregateAdd(order);
-        m_orders.emplace(order.orderId(), std::move(order));
+        auto id = order.orderId();
+        m_orders.emplace(std::move(id), std::move(order));
     }
 }
 
 void OrderCache::cancelOrder(const std::string& orderId)
 {
+    if (orderId.empty()) return;
     std::unique_lock<std::shared_mutex> lock(m_mutex);
 
     const auto it = m_orders.find(orderId);
@@ -177,11 +180,11 @@ void OrderCache::updateAggregateRemove(const Order& order)
 
     if (itCompany->second.buyQty == 0 && itCompany->second.sellQty  == 0)
     {
-        aggregate.companyVolumes.erase(order.company());
+        aggregate.companyVolumes.erase(itCompany);
     }
 
     if (aggregate.totalBuyQty == 0 && aggregate.totalSellQty == 0)
     {
-        m_securityAggregates.erase(order.securityId());
+        m_securityAggregates.erase(itSecurity);
     }
 }
