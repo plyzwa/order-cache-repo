@@ -513,6 +513,34 @@ TEST_F(OrderCacheTest, Scale_OneMillionOrdersStressBenchmark)
     EXPECT_LT(queryDurationNs, 50'000);
 }
 
+TEST_F(OrderCacheTest, Validation_RejectsAllEmptyFieldsAndMalformedSides)
+{
+    cache.addOrder(Order{"", "Sec1", "Buy", 100, "User1", "CompA"});        // Empty OrderId
+    cache.addOrder(Order{"Ord1", "", "Buy", 100, "User1", "CompA"});        // Empty SecurityId
+    cache.addOrder(Order{"Ord2", "Sec1", "", 100, "User1", "CompA"});       // Empty Side
+    cache.addOrder(Order{"Ord3", "Sec1", "Buy", 100, "", "CompA"});         // Empty User
+    cache.addOrder(Order{"Ord4", "Sec1", "Buy", 100, "User1", ""});         // Empty Company
+    cache.addOrder(Order{"Ord5", "Sec1", "buy", 100, "User1", "CompA"});    // Lowercase side
+    cache.addOrder(Order{"Ord6", "Sec1", "SELL", 100, "User1", "CompA"});   // Uppercase side
+    cache.addOrder(Order{"Ord7", "Sec1", " Buy ", 100, "User1", "CompA"});  // Whitespace side
+
+    EXPECT_EQ(cache.getAllOrders().size(), 0);
+}
+
+TEST_F(OrderCacheTest, OverflowProtection_HandlesLargeInstitutionalVolumesWithoutWrapping)
+{
+    constexpr unsigned int kHugeQty = 1'500'000'000;
+
+    cache.addOrder(Order{"B1", "CorpBond10Y", "Buy",  kHugeQty, "Trader1", "DealerA"});
+    cache.addOrder(Order{"B2", "CorpBond10Y", "Buy",  kHugeQty, "Trader2", "DealerB"});
+    cache.addOrder(Order{"S1", "CorpBond10Y", "Sell", kHugeQty, "Trader3", "DealerC"});
+    cache.addOrder(Order{"S2", "CorpBond10Y", "Sell", kHugeQty, "Trader4", "DealerD"});
+
+    // TotalBuy (3B) + TotalSell (3B) = 6B, which exceeds 32-bit uint max (~4.29B).
+    // Verifies internal 64-bit accumulators do not overflow during outsideBuys + outsideSells.
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("CorpBond10Y"), 3'000'000'000U);
+}
+
 
 int main(int argc, char **argv)
 {

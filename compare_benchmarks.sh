@@ -41,7 +41,7 @@ OUTPUT_STEP5=$("$BUILD_DIR/OrderCacheTest" --gtest_filter="$TEST_FILTER")
 echo "$OUTPUT_STEP5"
 
 # Extract microseconds from: "Query Execution Time: <number> us"
-TIME_STEP5_US=$(echo "$OUTPUT_STEP5" | grep -oP 'Query Execution Time:\s*\K[0-9]+' | head -n 1)
+TIME_STEP5_US=$(echo "$OUTPUT_STEP5" | awk -F'Query Execution Time:[[:space:]]*' '/Query Execution Time:/ {split($2, a, " "); print a[1]; exit}')
 
 if [[ -z "$TIME_STEP5_US" ]]; then
     echo "Error: Could not parse execution time for Step 5."
@@ -63,7 +63,7 @@ OUTPUT_STEP4=$("$BUILD_DIR/OrderCacheTest" --gtest_filter="$TEST_FILTER")
 echo "$OUTPUT_STEP4"
 
 # Extract microseconds from Step 4 output
-TIME_STEP4_US=$(echo "$OUTPUT_STEP4" | grep -oP 'Query Execution Time:\s*\K[0-9]+' | head -n 1)
+TIME_STEP4_US=$(echo "$OUTPUT_STEP4" | awk -F'Query Execution Time:[[:space:]]*' '/Query Execution Time:/ {split($2, a, " "); print a[1]; exit}')
 
 if [[ -z "$TIME_STEP4_US" ]]; then
     echo "Error: Could not parse execution time for Step 4."

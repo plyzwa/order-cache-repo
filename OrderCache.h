@@ -4,6 +4,7 @@
 #include <vector>
 #include <unordered_map>
 #include <shared_mutex>
+#include <cstdint>
 
 
 class Order
@@ -98,14 +99,14 @@ class OrderCache : public OrderCacheInterface
 
     struct CompanyVolume
     {
-        unsigned int buyQty{0};
-        unsigned int sellQty{0};
+        std::uint64_t buyQty{0};
+        std::uint64_t sellQty{0};
     };
 
     struct SecurityAggregate
     {
-        unsigned int totalBuyQty{0};
-        unsigned int totalSellQty{0};
+        std::uint64_t totalBuyQty{0};
+        std::uint64_t totalSellQty{0};
         std::unordered_map<std::string, CompanyVolume> companyVolumes;
     };
 

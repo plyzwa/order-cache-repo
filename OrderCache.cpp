@@ -4,6 +4,7 @@
 #include <algorithm>
 #include <string_view>
 #include <mutex>
+#include <limits>
 
 
 constexpr std::string_view BUY{"Buy"};
@@ -103,21 +104,27 @@ unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityI
     if (itSecurity == m_securityAggregates.end()) return 0;
 
     const auto& aggregate = itSecurity->second;
-    const unsigned int cap = std::min(aggregate.totalBuyQty, aggregate.totalSellQty);
+    const std::uint64_t cap = std::min(aggregate.totalBuyQty, aggregate.totalSellQty);
     if (cap == 0) return 0;
 
-    unsigned int matchable = cap;
+    std::uint64_t matchable = cap;
 
     for (const auto& [company, volume] : aggregate.companyVolumes)
     {
-        const unsigned int outsideBuys = aggregate.totalBuyQty - volume.buyQty;
-        const unsigned int outsideSells = aggregate.totalSellQty - volume.sellQty;
-        const unsigned int allowedForComp = outsideBuys + outsideSells;
+        const std::uint64_t outsideBuys = aggregate.totalBuyQty - volume.buyQty;
+        const std::uint64_t outsideSells = aggregate.totalSellQty - volume.sellQty;
+        const std::uint64_t allowedForComp = outsideBuys + outsideSells;
 
         matchable = std::min(matchable, allowedForComp);
     }
 
-    return matchable;
+
+    if (matchable > std::numeric_limits<unsigned int>::max() )
+    {
+        return std::numeric_limits<unsigned int>::max();
+    }
+
+    return static_cast<unsigned int>(matchable);
 }
 
 std::vector<Order> OrderCache::getAllOrders() const
