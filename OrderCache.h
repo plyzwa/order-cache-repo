@@ -4,6 +4,8 @@
 #include <vector>
 #include <unordered_map>
 
+
+
 class Order
 {
 
@@ -95,6 +97,24 @@ class OrderCache : public OrderCacheInterface
 
  private:
 
+    struct CompanyVolume
+    {
+        unsigned int buyQty{0};
+        unsigned int sellQty{0};
+    };
+
+    struct SecurityAggregate
+    {
+        unsigned int totalBuyQty{0};
+        unsigned int totalSellQty{0};
+        std::unordered_map<std::string, CompanyVolume> companyVolumes;
+    };
+
     std::unordered_map<std::string, Order> m_orders;
+
+    std::unordered_map<std::string, SecurityAggregate> m_securityAggregates;
+
+    void updateAggregateAdd(const Order& order);
+    void updateAggregateRemove(const Order& order);
 
 };

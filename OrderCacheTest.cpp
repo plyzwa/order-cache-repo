@@ -2,6 +2,8 @@
 
 #include <string>
 #include <vector>
+#include <chrono>
+
 #include "OrderCache.h"
 #include "gtest/gtest.h"
 
@@ -242,7 +244,6 @@ TEST_F(OrderCacheTest, Matching_DynamicallyUpdatesAfterCancellations)
     EXPECT_EQ(cache.getMatchingSizeForSecurity("SecY"), 0);
 }
 
-// 6. Identifier reuse: re-adding a cancelled order ID is permitted
 TEST_F(OrderCacheTest, AddOrder_ReAddAfterCancelSucceeds)
 {
     cache.addOrder(Order{"OrdReuse", "SecZ", "Buy", 100, "User1", "CompA"});
@@ -258,10 +259,103 @@ TEST_F(OrderCacheTest, AddOrder_ReAddAfterCancelSucceeds)
     EXPECT_EQ(orders[0].qty(), 999);
 }
 
+// ====================================== PHASE 3 STEP5 ======================================
 
+TEST_F(OrderCacheTest, Matching_ScalesEfficientlyWithLargeOrderVolume)
+{
+    // Inject 100,000 orders across 3 companies for a single security
+    constexpr unsigned int kOrderCount = 100000;
+    for (unsigned int i = 0; i < kOrderCount; ++i)
+    {
+        const std::string id = "BulkOrd_" + std::to_string(i);
+        if (i % 2 == 0)
+        {
+            cache.addOrder(Order{id, "SecScale", "Buy", 10, "User" + std::to_string(i), "CompA"});
+        }
+        else if (i % 4 == 1)
+        {
+            cache.addOrder(Order{id, "SecScale", "Sell", 10, "User" + std::to_string(i), "CompB"});
+        }
+        else
+        {
+            cache.addOrder(Order{id, "SecScale", "Sell", 10, "User" + std::to_string(i), "CompC"});
+        }
+    }
 
+    // 50,000 Buys of 10 = 500,000 Buy qty from CompA
+    // 25,000 Sells of 10 = 250,000 Sell qty from CompB
+    // 25,000 Sells of 10 = 250,000 Sell qty from CompC
+    // Total Sell qty = 500,000 (all outside CompA). Expected match = 500,000.
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecScale"), 500000);
+}
 
+TEST_F(OrderCacheTest, Benchmark_MatchingEngineLatency)
+{
+    constexpr unsigned int kOrders = 4000;
+    for (unsigned int i = 0; i < kOrders; ++i)
+    {
+        const std::string id = "Bench_" + std::to_string(i);
+        if (i % 2 == 0)
+        {
+            cache.addOrder(Order{id, "SecBench", "Buy", 10, "User" + std::to_string(i), "CompA"});
+        }
+        else if (i % 4 == 1)
+        {
+            cache.addOrder(Order{id, "SecBench", "Sell", 10, "User" + std::to_string(i), "CompB"});
+        }
+        else
+        {
+            cache.addOrder(Order{id, "SecBench", "Sell", 10, "User" + std::to_string(i), "CompC"});
+        }
+    }
 
+    const auto start = std::chrono::high_resolution_clock::now();
+    const unsigned int matched = cache.getMatchingSizeForSecurity("SecBench");
+    const auto end = std::chrono::high_resolution_clock::now();
+
+    const auto durationUs = std::chrono::duration_cast<std::chrono::microseconds>(end - start).count();
+
+    EXPECT_EQ(matched, 20000);
+    std::cout << "\n>>> [BENCHMARK RESULTS] <<<\n"
+              << "Orders in Book: " << kOrders << "\n"
+              << "Query Execution Time: " << durationUs << " us (" << durationUs / 1000.0 << " ms)\n"
+              << "---------------------------\n";
+}
+
+TEST_F(OrderCacheTest, Benchmark_QueryLatencyUnderHeavyLoad)
+{
+    constexpr unsigned int kOrderCount = 100000;
+    for (unsigned int i = 0; i < kOrderCount; ++i)
+    {
+        const std::string id = "BenchOrd_" + std::to_string(i);
+        if (i % 2 == 0)
+        {
+            cache.addOrder(Order{id, "SecBench", "Buy", 10, "User" + std::to_string(i), "CompA"});
+        }
+        else if (i % 4 == 1)
+        {
+            cache.addOrder(Order{id, "SecBench", "Sell", 10, "User" + std::to_string(i), "CompB"});
+        }
+        else
+        {
+            cache.addOrder(Order{id, "SecBench", "Sell", 10, "User" + std::to_string(i), "CompC"});
+        }
+    }
+
+    // Benchmark ONLY the query method execution time
+    const auto start = std::chrono::high_resolution_clock::now();
+    const unsigned int matched = cache.getMatchingSizeForSecurity("SecBench");
+    const auto end = std::chrono::high_resolution_clock::now();
+
+    const auto durationNs = std::chrono::duration_cast<std::chrono::nanoseconds>(end - start).count();
+
+    EXPECT_EQ(matched, 500000);
+    std::cout << "[ BENCHMARK ] getMatchingSizeForSecurity latency over 100,000 orders: "
+              << durationNs << " ns (" << durationNs / 1'000.0 << " us)\n";
+
+    // O(K) query over 3 companies should complete in well under 100 microseconds
+    EXPECT_LT(durationNs, 100'000); 
+}
 
 
 
