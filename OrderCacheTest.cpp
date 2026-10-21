@@ -453,6 +453,71 @@ TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
     EXPECT_NO_THROW(cache.getAllOrders());
 }
 
+// ====================================== PHASE 5 STEP7 ======================================
+
+TEST_F(OrderCacheTest, Scale_OneMillionOrdersStressBenchmark)
+{
+    constexpr unsigned int kTotalOrders = 1'000'000;
+    std::cout << "\n>>> [1M ORDERS BENCHMARK] Ingesting " << kTotalOrders << " orders...\n";
+
+    const auto ingestStart = std::chrono::high_resolution_clock::now();
+
+    for (unsigned int i = 0; i < kTotalOrders; ++i)
+    {
+        const std::string id = "Ord1M_" + std::to_string(i);
+        // Distribute across 5 securities
+        const std::string sec = "Sec_" + std::to_string(i % 5);
+
+        if (i % 2 == 0)
+        {
+            cache.addOrder(Order{id, sec, "Buy", 10, "User" + std::to_string(i % 100), "CompA"});
+        }
+        else if (i % 4 == 1)
+        {
+            cache.addOrder(Order{id, sec, "Sell", 10, "User" + std::to_string(i % 100), "CompB"});
+        }
+        else
+        {
+            cache.addOrder(Order{id, sec, "Sell", 10, "User" + std::to_string(i % 100), "CompC"});
+        }
+    }
+
+    const auto ingestEnd = std::chrono::high_resolution_clock::now();
+    const auto ingestDurationMs = std::chrono::duration_cast<std::chrono::milliseconds>(ingestEnd - ingestStart).count();
+
+    std::cout << ">>> Ingestion completed in: " << ingestDurationMs << " ms ("
+              << (kTotalOrders * 1000.0) / (ingestDurationMs > 0 ? ingestDurationMs : 1) << " ops/sec)\n";
+
+    // Benchmark query latency against Sec_0 (contains 200,000 orders: 100k Buys from CompA, 50k Sells CompB, 50k Sells CompC)
+    const auto queryStart = std::chrono::high_resolution_clock::now();
+    const unsigned int matched = cache.getMatchingSizeForSecurity("Sec_0");
+    const auto queryEnd = std::chrono::high_resolution_clock::now();
+
+    const auto queryDurationNs = std::chrono::duration_cast<std::chrono::nanoseconds>(queryEnd - queryStart).count();
+
+    std::cout << ">>> Query getMatchingSizeForSecurity(\"Sec_0\") completed in: "
+              << queryDurationNs << " ns (" << queryDurationNs / 1'000.0 << " us)\n";
+
+    // 100,000 buys of 10 = 1,000,000 qty from CompA
+    // 50,000 sells of 10 = 500,000 qty from CompB
+    // 50,000 sells of 10 = 500,000 qty from CompC
+    // Total outside sells = 1,000,000. Matched volume must equal 1,000,000.
+    EXPECT_EQ(matched, 1'000'000);
+
+    // Latency constraint: query over 3 companies must be strictly under 50 microseconds
+    EXPECT_LT(queryDurationNs, 50'000);
+}
+
+
+
+
+
+
+
+
+
+
+
 
 
 
