@@ -1,4 +1,3 @@
-// Write your unit tests for the OrderCache implementation here.
 // Use the Google Test framework.
 
 #include <string>
@@ -119,7 +118,7 @@ TEST_F(OrderCacheTest, CancelOrdersForSecIdWithMinimumQty_NonExistentSecurityIsN
     EXPECT_EQ(cache.getAllOrders().size(), 1);
 }
 
-// ====================================== PHASE 2 STEP3 =================== ===================
+// ====================================== PHASE 2 STEP3 ======================================
 
 TEST_F(OrderCacheTest, Matching_ReadmeExample1)
 {
@@ -179,6 +178,86 @@ TEST_F(OrderCacheTest, Matching_ReadmeExample3)
     EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId2"), 600);
     EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId3"), 0);
 }
+
+// ====================================== PHASE 2 STEP4 ======================================
+
+TEST_F(OrderCacheTest, Matching_EmptyAndNonExistentSecurity)
+{
+    EXPECT_EQ(cache.getMatchingSizeForSecurity(""), 0);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("NonExistentSec"), 0);
+
+    cache.addOrder(Order{"Ord1", "Sec1", "Buy", 100, "User1", "CompA"});
+    EXPECT_EQ(cache.getMatchingSizeForSecurity(""), 0);
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("Sec2"), 0);
+}
+
+TEST_F(OrderCacheTest, Matching_SameSideOnlyReturnsZero)
+{
+    cache.addOrder(Order{"Ord1", "Sec1", "Buy", 100, "User1", "CompA"});
+    cache.addOrder(Order{"Ord2", "Sec1", "Buy", 200, "User2", "CompB"});
+    cache.addOrder(Order{"Ord3", "Sec1", "Buy", 300, "User3", "CompC"});
+
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("Sec1"), 0);
+}
+
+TEST_F(OrderCacheTest, Matching_OppositeSidesSameCompanyReturnsZero)
+{
+    cache.addOrder(Order{"Ord1", "Sec1", "Buy", 500, "User1", "CompanySame"});
+    cache.addOrder(Order{"Ord2", "Sec1", "Sell", 500, "User2", "CompanySame"});
+    cache.addOrder(Order{"Ord3", "Sec1", "Sell", 200, "User3", "CompanySame"});
+
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("Sec1"), 0);
+}
+
+TEST_F(OrderCacheTest, Matching_OneToManyPartialFillsWithCompanyFilter)
+{
+    // 1 large Buy for 1000 from CompA
+    cache.addOrder(Order{"Buy1", "SecX", "Buy", 1000, "UserA", "CompA"});
+
+    // 4 smaller Sells
+    cache.addOrder(Order{"Sell1", "SecX", "Sell", 200, "UserB", "CompB"}); // matches 200
+    cache.addOrder(Order{"Sell2", "SecX", "Sell", 300, "UserC", "CompC"}); // matches 300
+    cache.addOrder(Order{"Sell3", "SecX", "Sell", 400, "UserA2", "CompA"}); // SKIPPED (same company)
+    cache.addOrder(Order{"Sell4", "SecX", "Sell", 150, "UserD", "CompD"}); // matches 150
+
+    // Total matched: 200 + 300 + 150 = 650
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecX"), 650);
+}
+
+TEST_F(OrderCacheTest, Matching_DynamicallyUpdatesAfterCancellations)
+{
+    cache.addOrder(Order{"Ord1", "SecY", "Buy", 500, "User1", "CompA"});
+    cache.addOrder(Order{"Ord2", "SecY", "Sell", 500, "User2", "CompB"});
+    cache.addOrder(Order{"Ord3", "SecY", "Sell", 300, "User3", "CompC"});
+
+    // Initial match: 500 (Ord1 matched with Ord2)
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecY"), 500);
+
+    // Cancel Ord2: Ord1 can now match against Ord3 for 300
+    cache.cancelOrder("Ord2");
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecY"), 300);
+
+    // Bulk cancel User1 (the buyer): match drops to 0
+    cache.cancelOrdersForUser("User1");
+    EXPECT_EQ(cache.getMatchingSizeForSecurity("SecY"), 0);
+}
+
+// 6. Identifier reuse: re-adding a cancelled order ID is permitted
+TEST_F(OrderCacheTest, AddOrder_ReAddAfterCancelSucceeds)
+{
+    cache.addOrder(Order{"OrdReuse", "SecZ", "Buy", 100, "User1", "CompA"});
+    ASSERT_EQ(cache.getAllOrders().size(), 1);
+
+    cache.cancelOrder("OrdReuse");
+    ASSERT_EQ(cache.getAllOrders().size(), 0);
+
+    // Re-add with same ID but different quantity
+    cache.addOrder(Order{"OrdReuse", "SecZ", "Buy", 999, "User1", "CompA"});
+    const auto orders = cache.getAllOrders();
+    ASSERT_EQ(orders.size(), 1);
+    EXPECT_EQ(orders[0].qty(), 999);
+}
+
 
 
 

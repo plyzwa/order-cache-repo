@@ -25,7 +25,8 @@ static bool isValid(const Order& order)
 
 void OrderCache::addOrder(Order order)
 {
-    if (m_orders.find(order.orderId()) == m_orders.end() && isValid(order)) 
+    // It is better to have isValid to be first to improve performance
+    if (isValid(order) && m_orders.find(order.orderId()) == m_orders.end() ) 
     {
         m_orders.emplace(order.orderId(), std::move(order));
     }
@@ -38,6 +39,8 @@ void OrderCache::cancelOrder(const std::string& orderId)
 
 void OrderCache::cancelOrdersForUser(const std::string& user)
 {
+    if (user.empty()) return;
+
     for (auto it = m_orders.begin(); it != m_orders.end() ; )
     {
         if (it->second.user() == user)
@@ -53,6 +56,9 @@ void OrderCache::cancelOrdersForUser(const std::string& user)
 
 void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityId, unsigned int minQty)
 {
+    if (securityId.empty()) return;
+    if(minQty == 0) return;
+
     for (auto it = m_orders.begin(); it != m_orders.end() ; )
     {
         if (it->second.securityId() == securityId &&  it->second.qty() >= minQty)
@@ -79,6 +85,8 @@ struct MatchingCandidate
 
 unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityId)
 {
+    if (securityId.empty()) return 0;
+
     unsigned int matched{0};
 
     std::vector<MatchingCandidate> buyOrders;
@@ -125,7 +133,6 @@ unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityI
 
     return matched;
 }
-
 
 std::vector<Order> OrderCache::getAllOrders() const
 {
