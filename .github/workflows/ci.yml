@@ -18,6 +18,18 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
+    # --- Cache vcpkg assets/builds across runs ---
+    - name: Restore vcpkg artifacts
+      uses: actions/cache@v4
+      with:
+        path: |
+          C:/vcpkg/installed
+          C:/vcpkg/packages
+          ~/.cache/vcpkg
+        key: vcpkg-${{ matrix.os }}-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+        restore-keys: |
+          vcpkg-${{ matrix.os }}-
+
     # --- Install Dependencies per OS ---
     - name: Install Dependencies (Ubuntu)
       if: runner.os == 'Linux'
@@ -29,7 +41,7 @@ jobs:
         sudo cmake --build . --target install
 
     - name: Install Dependencies (macOS)
-      if: runner.os == 'MacOS'
+      if: runner.os == 'macOS'
       run: |
         brew install googletest
 
@@ -37,15 +49,13 @@ jobs:
       if: runner.os == 'Windows'
       run: |
         vcpkg install gtest:x64-windows
-      # Note: windows-latest has vcpkg pre-installed, or CMake can find it via toolchains if needed. 
-      # Alternatively, NuGet can be used, but let's configure CMake.
 
     # --- Build & Test ---
     - name: Configure CMake
-      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
+      run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake"
 
     - name: Build Project
       run: cmake --build build --config Release
 
     - name: Run Google Tests
-      run: ctest --test-dir build --config Release --output-on-failure
+      run: ctest --test-dir build --output-on-failure
