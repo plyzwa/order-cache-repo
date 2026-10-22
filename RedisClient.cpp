@@ -10,8 +10,6 @@ RedisClient::RedisClient(const Config& config)
 {
     sw::redis::ConnectionOptions connOpts;
 
-    // Resolve host and port from environment variables if present (e.g., Docker Compose),
-    // otherwise fall back to Config struct defaults.
     const char* envHost = std::getenv("REDIS_HOST");
     const char* envPort = std::getenv("REDIS_PORT");
 

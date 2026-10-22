@@ -1,19 +1,17 @@
 #include "OrderCacheHelpers.h"
 #include "order.pb.h"
 
-
 #include <string>
-
-namespace Protobuff
-{
 
 
 // =================================== PROTOBUFFER ===================================
+namespace Protobuff
+{
+
 std::string serializeOrder(const Order& order)
 {
     trading::Order protoOrder;
 
-    // Map scalar fields
     protoOrder.set_order_id(order.orderId());
     protoOrder.set_security_id(order.securityId());
     protoOrder.set_qty(static_cast<uint32_t>(order.qty()));
@@ -45,7 +43,7 @@ Order deserializeOrder(const std::string& binaryData)
 
     if (!protoOrder.ParseFromString(binaryData))
     {
-        throw std::runtime_error("Failed to parse Order from protobuf binary stream!");
+        throw std::runtime_error("Failed to parse Order from protobuf binary stream.");
     }
 
     std::string sideStr = "Buy";
@@ -71,7 +69,7 @@ Order deserializeOrder(const std::string& binaryData)
 } // Protobuff
 
 
-// =================================== PROTOBUFFER ===================================
+// =================================== FLATBUFFER ===================================
 
 namespace FlatBuff
 {

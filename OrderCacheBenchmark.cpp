@@ -7,28 +7,25 @@
 #include <vector>
 #include <string>
 
-// ============================================================================
-// Manual Harness Definitions (Matching OrderCacheBenchmark.h)
-// ============================================================================
 
 namespace Benchmark
 {
 
 using Clock = std::chrono::steady_clock;
 
-void printBenchmarkHeader()
+static void printBenchmarkHeader()
 {
     std::cout << "========================================================================================\n"
               << "                       ORDER CACHE CORE ENGINE BENCHMARK                                \n"
               << "========================================================================================\n";
 }
 
-void printBenchmarkFooter()
+static void printBenchmarkFooter()
 {
     std::cout << "========================================================================================\n";
 }
 
-void printBenchmarkResult(const BenchmarkResult& res)
+static void printBenchmarkResult(const BenchmarkResult& res)
 {
     std::cout << std::left << std::setw(32) << res.name
               << " | Ops: " << std::setw(10) << res.operations
@@ -90,7 +87,7 @@ BenchmarkResult benchmarkQueryLatency(const std::size_t bookSize, const std::siz
     }
 
     volatile unsigned int dummy = cache.getMatchingSizeForSecurity("SecTarget");
-    (void)dummy;
+    (void) dummy;
 
     const auto start = Clock::now();
     for (std::size_t i = 0; i < iterations; ++i)

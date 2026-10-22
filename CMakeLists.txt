@@ -15,6 +15,12 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# MSVC-specific warning suppressions and CRT compatibility definitions
+if(MSVC)
+  add_compile_definitions(_CRT_SECURE_NO_WARNINGS)
+  add_compile_options(/wd4200) # Suppress C4200: zero-sized array in struct/union from C headers (sds.h)
+endif()
+
 # Optional Sanitizers for memory and thread-safety verification on Linux/Clang/GCC
 option(ENABLE_TSAN "Enable ThreadSanitizer for data race detection" OFF)
 option(ENABLE_ASAN "Enable Address and Undefined Behavior Sanitizers" OFF)
@@ -147,13 +153,17 @@ target_include_directories(OrderCacheTest PRIVATE
     ${Protobuf_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Suppress external third-party warnings from hiredis
+target_include_directories(OrderCacheTest SYSTEM PRIVATE
     ${hiredis_SOURCE_DIR}/include
 )
 
 target_link_libraries(OrderCacheTest PRIVATE
     ${GTEST_BOTH_LIBRARIES}
     Threads::Threads
-    ${Protobuf_LIBRARIES}
+    protobuf::libprotobuf
     flatbuffers
     redis++
     hiredis
@@ -183,13 +193,16 @@ target_include_directories(OrderCacheBenchmark PRIVATE
     ${Protobuf_INCLUDE_DIRS}
     ${CMAKE_CURRENT_BINARY_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+target_include_directories(OrderCacheBenchmark SYSTEM PRIVATE
     ${hiredis_SOURCE_DIR}/include
 )
 
 target_link_libraries(OrderCacheBenchmark PRIVATE
     benchmark::benchmark
     Threads::Threads
-    ${Protobuf_LIBRARIES}
+    protobuf::libprotobuf
     flatbuffers
     redis++
     hiredis
