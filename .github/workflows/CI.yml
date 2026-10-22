@@ -38,9 +38,6 @@ jobs:
             protobuf-compiler \
             libprotobuf-dev \
             libbenchmark-dev
-          cd /usr/src/googletest
-          sudo cmake .
-          sudo cmake --build . --target install
 
       - name: Configure CMake
         run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release

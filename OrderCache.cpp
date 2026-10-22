@@ -36,18 +36,21 @@ namespace
 OrderCache::OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting)
     : m_redisClient(std::move(redisClient))
 {
-    if (m_redisClient && loadExisting) loadFromRedis();
+    if (m_redisClient && loadExisting)
+    {
+        loadFromRedis();
+    }
 }
 
 void OrderCache::addOrder(Order order)
 {
-    // Validate input outside the exclusive lock to minimize lock contention
     if (!isValid(order))
     {
         return;
     }
 
-    std::string id = order.orderId();
+    // Extract identifiers once to avoid redundant temporary allocations
+    const std::string id = order.orderId();
 
     std::unique_lock<std::shared_mutex> lock(m_mutex);
 
@@ -60,7 +63,7 @@ void OrderCache::addOrder(Order order)
             m_redisClient->saveOrder(order);
         }
 
-        m_orders.emplace(std::move(id), std::move(order));
+        m_orders.emplace(id, std::move(order));
     }
 }
 
@@ -127,7 +130,6 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
 
     for (auto it = m_orders.begin(); it != m_orders.end(); )
     {
-        // Fast numeric check short-circuits expensive string comparison
         if (it->second.qty() >= minQty && it->second.securityId() == securityId)
         {
             updateAggregateRemove(it->second);
@@ -170,11 +172,7 @@ unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityI
 
     std::uint64_t matchable = cap;
 
-    // Closed-form O(K) bipartite matching bound (Hall's Marriage Theorem / Min-Cut):
-    // Since orders from the same company cannot match against each other, the maximum
-    // matchable volume is bounded by min(totalBuyQty, totalSellQty) and, for every
-    // company C, by the total volume available outside of C:
-    //   (totalBuyQty - buyQty[C]) + (totalSellQty - sellQty[C]).
+    // Closed-form O(K) bipartite matching bound (Hall's Marriage Theorem / Min-Cut)
     for (const auto& [company, volume] : aggregate.companyVolumes)
     {
         const std::uint64_t outsideBuys = aggregate.totalBuyQty - volume.buyQty;
@@ -219,16 +217,18 @@ void OrderCache::loadFromRedis()
     m_orders.clear();
     m_securityAggregates.clear();
 
-    const auto& orderIds = m_redisClient->getAllOrderIds();
+    const auto orderIds = m_redisClient->getAllOrderIds();
 
     for (const auto& orderId : orderIds)
     {
-        const auto orderOpt = m_redisClient->getOrder(orderId);
+        auto orderOpt = m_redisClient->getOrder(orderId);
         if (orderOpt.has_value())
         {
-            const Order& order = *orderOpt;
+            // Bind as mutable rvalue reference to prevent deep string copies
+            Order order = std::move(*orderOpt);
             updateAggregateAdd(order);
-            m_orders.emplace(order.orderId(), std::move(order));
+            const std::string id = order.orderId();
+            m_orders.emplace(id, std::move(order));
         }
     }
 }
