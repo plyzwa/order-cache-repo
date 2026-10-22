@@ -1,6 +1,5 @@
 #pragma once
 
-#include "OrderCache.h"
 #include "order_generated.h"
 
 #include <vector>
@@ -9,6 +8,7 @@
 #include <cstdint>
 #include <stdexcept>
 
+#include "OrderCache.h"
 
 namespace Protobuff
 {

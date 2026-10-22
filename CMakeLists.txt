@@ -128,6 +128,7 @@ set(SOURCES
     OrderCache.cpp
     OrderCacheTest.cpp
     OrderCacheHelpers.cpp
+    RedisClient.cpp
     ${PROTO_SRCS}
     ${PROTO_HDRS}
     ${FBS_HEADER}

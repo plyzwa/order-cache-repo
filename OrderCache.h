@@ -5,6 +5,7 @@
 #include <unordered_map>
 #include <shared_mutex>
 #include <cstdint>
+#include <memory>
 
 
 class Order
@@ -78,22 +79,32 @@ class OrderCacheInterface
 
 };
 
+namespace Redis
+{
+    class RedisClient;
+}
+
 class OrderCache : public OrderCacheInterface
 {
 
  public:
 
-  void addOrder(Order order) override;
+    OrderCache() = default;
+    explicit OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting = false);
 
-  void cancelOrder(const std::string& orderId) override;
+    void addOrder(Order order) override;
 
-  void cancelOrdersForUser(const std::string& user) override;
+    void cancelOrder(const std::string& orderId) override;
 
-  void cancelOrdersForSecIdWithMinimumQty(const std::string& securityId, unsigned int minQty) override;
+    void cancelOrdersForUser(const std::string& user) override;
 
-  unsigned int getMatchingSizeForSecurity(const std::string& securityId) override;
+    void cancelOrdersForSecIdWithMinimumQty(const std::string& securityId, unsigned int minQty) override;
 
-  std::vector<Order> getAllOrders() const override;
+    unsigned int getMatchingSizeForSecurity(const std::string& securityId) override;
+
+    std::vector<Order> getAllOrders() const override;
+
+    void loadFromRedis();
 
  private:
 
@@ -117,6 +128,10 @@ class OrderCache : public OrderCacheInterface
     void updateAggregateAdd(const Order& order);
     void updateAggregateRemove(const Order& order);
 
+    std::shared_ptr<Redis::RedisClient> m_redisClient{nullptr};
+    
     mutable std::shared_mutex m_mutex;
+
+
 
 };

@@ -10,6 +10,7 @@
 #include "OrderCache.h"
 #include "OrderCacheHelpers.h"
 #include "gtest/gtest.h"
+#include "RedisClient.h"
 
 class OrderCacheTest : public ::testing::Test
 {
@@ -26,8 +27,7 @@ protected:
 TEST_F(OrderCacheTest, ExampleAddOrder)
 {
     cache.addOrder(Order{"OrdId1", "SecId1", "Buy", 1000, "User1", "CompanyA"});
-    ASSERT_EQ(cache.getAllOrders().size(), 1);
-}
+    ASSERT_EQ(cache.getAllOrders().size(), 1);}
 
 // ====================================== PHASE 1 STEP1 ======================================
 TEST_F(OrderCacheTest, AddAndRetrieveSingleOrder)
@@ -712,6 +712,72 @@ TEST_F(OrderCacheTest, Serialization_ProtobufAndFlatBuffersParity)
     EXPECT_EQ(protoRestored.qty(), fbsRestored.qty());
     EXPECT_EQ(protoRestored.user(), fbsRestored.user());
     EXPECT_EQ(protoRestored.company(), fbsRestored.company());
+}
+
+
+// ====================================== PHASE 8 STEP10 : REDIS PERSISTENCE ======================================
+
+TEST_F(OrderCacheTest, RedisPersistence_AddAndCancelSyncsWithRedis)
+{
+    auto redisClient = std::make_shared<Redis::RedisClient>();
+    if (!redisClient->ping())
+    {
+        GTEST_SKIP() << "Skipping Redis persistence test: local redis-server not running on port 6379.";
+    }
+
+    // Instantiate Redis-backed OrderCache
+    OrderCache redisCache(redisClient);
+
+    // Add an order
+    Order order{"RedisOrd_101", "SecRedis", "Buy", 500, "TraderX", "FirmA"};
+    redisCache.addOrder(order);
+
+    // Verify it exists in memory
+    ASSERT_EQ(redisCache.getAllOrders().size(), 1);
+
+    // Verify it was durably written to Redis
+    auto retrievedOrder = redisClient->getOrder("RedisOrd_101");
+    ASSERT_TRUE(retrievedOrder.has_value());
+    EXPECT_EQ(retrievedOrder->orderId(), "RedisOrd_101");
+    EXPECT_EQ(retrievedOrder->securityId(), "SecRedis");
+    EXPECT_EQ(retrievedOrder->qty(), 500U);
+
+    // Cancel order in cache
+    redisCache.cancelOrder("RedisOrd_101");
+    EXPECT_EQ(redisCache.getAllOrders().size(), 0);
+
+    // Verify it was removed from Redis
+    EXPECT_FALSE(redisClient->getOrder("RedisOrd_101").has_value());
+}
+
+TEST_F(OrderCacheTest, RedisPersistence_StartupHydrationRecoversState)
+{
+    auto redisClient = std::make_shared<Redis::RedisClient>();
+    if (!redisClient->ping())
+    {
+        GTEST_SKIP() << "Skipping Redis hydration test: local redis-server not running on port 6379.";
+    }
+
+    // Clean up any old keys
+    redisClient->removeOrder("Hydrate_1");
+    redisClient->removeOrder("Hydrate_2");
+
+    // Populate Redis directly using RedisClient
+    Order o1{"Hydrate_1", "SecH1", "Buy", 100, "User1", "Comp1"};
+    Order o2{"Hydrate_2", "SecH2", "Sell", 200, "User2", "Comp2"};
+    redisClient->saveOrder(o1);
+    redisClient->saveOrder(o2);
+
+    // Create a new OrderCache with loadExisting = true
+    OrderCache hydratedCache(redisClient, true);
+
+    // Verify orders were loaded into memory and aggregates were rebuilt
+    const auto orders = hydratedCache.getAllOrders();
+    EXPECT_EQ(orders.size(), 2);
+
+    // Clean up Redis keys
+    redisClient->removeOrder("Hydrate_1");
+    redisClient->removeOrder("Hydrate_2");
 }
 
 
