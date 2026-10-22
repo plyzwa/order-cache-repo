@@ -1,4 +1,7 @@
 #include "RedisClient.h"
+#include <cstdlib>
+#include <unordered_set>
+#include <iterator>
 
 namespace Redis
 {
@@ -6,8 +9,30 @@ namespace Redis
 RedisClient::RedisClient(const Config& config)
 {
     sw::redis::ConnectionOptions connOpts;
-    connOpts.host = config.host;
-    connOpts.port = config.port;
+
+    // Resolve host and port from environment variables if present (e.g., Docker Compose),
+    // otherwise fall back to Config struct defaults.
+    const char* envHost = std::getenv("REDIS_HOST");
+    const char* envPort = std::getenv("REDIS_PORT");
+
+    connOpts.host = (envHost && envHost[0] != '\0') ? std::string(envHost) : config.host;
+    
+    if (envPort && envPort[0] != '\0')
+    {
+        try
+        {
+            connOpts.port = std::stoi(envPort);
+        }
+        catch (...)
+        {
+            connOpts.port = config.port;
+        }
+    }
+    else
+    {
+        connOpts.port = config.port;
+    }
+
     connOpts.connect_timeout = config.connectTimeout;
     connOpts.socket_timeout = config.socketTimeout;
 

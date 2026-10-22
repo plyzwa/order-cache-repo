@@ -12,8 +12,21 @@ jobs:
     runs-on: ${{ matrix.os }}
     
     strategy:
+      fail-fast: false
       matrix:
         os: [ubuntu-latest, windows-latest, macos-latest]
+
+    # Spin up Redis service container on Linux runners
+    services:
+      redis:
+        image: redis:alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 3s
+          --health-timeout 2s
+          --health-retries 5
 
     steps:
     - uses: actions/checkout@v4
@@ -27,7 +40,7 @@ jobs:
           C:/vcpkg/installed
           C:/vcpkg/packages
           ~/.cache/vcpkg
-        key: vcpkg-windows-${{ hashFiles('vcpkg.json', 'CMakeLists.txt') }}
+        key: vcpkg-windows-${{ hashFiles('CMakeLists.txt') }}
         restore-keys: |
           vcpkg-windows-
 
@@ -36,7 +49,13 @@ jobs:
       if: runner.os == 'Linux'
       run: |
         sudo apt-get update
-        sudo apt-get install -y libgtest-dev cmake
+        sudo apt-get install -y \
+          cmake \
+          build-essential \
+          libgtest-dev \
+          protobuf-compiler \
+          libprotobuf-dev \
+          libbenchmark-dev
         cd /usr/src/googletest
         sudo cmake .
         sudo cmake --build . --target install
@@ -44,14 +63,14 @@ jobs:
     - name: Install Dependencies (macOS)
       if: runner.os == 'macOS'
       run: |
-        brew install googletest
+        brew install googletest protobuf google-benchmark
 
     - name: Install Dependencies (Windows)
       if: runner.os == 'Windows'
       run: |
-        vcpkg install gtest:x64-windows
+        vcpkg install gtest:x64-windows protobuf:x64-windows benchmark:x64-windows
 
-    # --- Configure CMake (Conditional Toolchain for Windows) ---
+    # --- Configure CMake ---
     - name: Configure CMake (Linux / macOS)
       if: runner.os != 'Windows'
       run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release
@@ -60,14 +79,29 @@ jobs:
       if: runner.os == 'Windows'
       run: cmake -B build -S . -DCMAKE_BUILD_TYPE=Release -DCMAKE_TOOLCHAIN_FILE="C:/vcpkg/scripts/buildsystems/vcpkg.cmake"
 
-    # --- Build & Test ---
+    # --- Build Binaries ---
     - name: Build Project
       run: cmake --build build --config Release
 
-    - name: Run Google Tests (Linux / macOS)
-      if: runner.os != 'Windows'
+    # --- Run Tests & Benchmarks ---
+    - name: Run Tests (Linux)
+      if: runner.os == 'Linux'
+      env:
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
       run: ctest --test-dir build --output-on-failure
 
-    - name: Run Google Tests (Windows)
+    - name: Run Tests (macOS)
+      if: runner.os == 'macOS'
+      run: ctest --test-dir build --output-on-failure
+
+    - name: Run Tests (Windows)
       if: runner.os == 'Windows'
       run: ctest --test-dir build -C Release --output-on-failure
+
+    - name: Run Benchmark Sanity Check (Linux)
+      if: runner.os == 'Linux'
+      env:
+        REDIS_HOST: localhost
+        REDIS_PORT: 6379
+      run: ./build/OrderCacheBenchmark --benchmark_filter="BM_OrderCreation|BM_Protobuf_Serialize|BM_FlatBuffers_ZeroCopyAccess"
