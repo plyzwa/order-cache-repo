@@ -216,6 +216,9 @@ endif()
 enable_testing()
 add_test(NAME OrderCacheTest COMMAND OrderCacheTest)
 
+# Installation rules
+install(TARGETS OrderCacheTest DESTINATION bin)
+
 message(STATUS "CMake version: ${CMAKE_VERSION}")
 message(STATUS "C++ compiler: ${CMAKE_CXX_COMPILER_ID} ${CMAKE_CXX_COMPILER_VERSION}")
 message(STATUS "Build type: ${CMAKE_BUILD_TYPE}")
