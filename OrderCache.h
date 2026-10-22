@@ -1,10 +1,11 @@
 #pragma once
 
-#include <string>
-#include <vector>
-#include <unordered_map>
-#include <shared_mutex>
 #include <cstdint>
+#include <memory>
+#include <shared_mutex>
+#include <string>
+#include <unordered_map>
+#include <vector>
 
 class Order
 {
@@ -34,7 +35,7 @@ public:
 
 private:
     // use the below to hold the order data
-    // do not remove the these member variables
+    // do not remove these member variables
     std::string m_orderId;     // unique order id
     std::string m_securityId;  // security identifier
     std::string m_side;        // side of the order, eg Buy or Sell
@@ -72,6 +73,11 @@ public:
     virtual std::vector<Order> getAllOrders() const = 0;
 };
 
+namespace Redis
+{
+    class RedisClient;
+}
+
 /**
  * @brief Thread-safe in-memory order cache and real-time matching engine.
  *
@@ -84,6 +90,7 @@ class OrderCache final : public OrderCacheInterface
 {
 public:
     OrderCache() = default;
+    explicit OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting = false);
     ~OrderCache() override = default;
 
     void addOrder(Order order) override;
@@ -97,6 +104,8 @@ public:
     unsigned int getMatchingSizeForSecurity(const std::string& securityId) override;
 
     std::vector<Order> getAllOrders() const override;
+
+    void loadFromRedis();
 
 private:
     struct CompanyVolume
@@ -118,5 +127,6 @@ private:
     void updateAggregateAdd(const Order& order);
     void updateAggregateRemove(const Order& order);
 
+    std::shared_ptr<Redis::RedisClient> m_redisClient{nullptr};
     mutable std::shared_mutex m_mutex;
 };

@@ -1,4 +1,5 @@
 #include "OrderCache.h"
+#include <RedisClient.h>
 
 #include <algorithm>
 #include <limits>
@@ -32,22 +33,37 @@ namespace
     }
 } // namespace
 
+OrderCache::OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting)
+    : m_redisClient(std::move(redisClient))
+{
+    if (m_redisClient && loadExisting)
+    {
+        loadFromRedis();
+    }
+}
+
 void OrderCache::addOrder(Order order)
 {
-    // Validate input outside the exclusive lock to minimize lock contention
     if (!isValid(order))
     {
         return;
     }
 
-    std::string id = order.orderId();
+    // Extract identifiers once to avoid redundant temporary allocations
+    const std::string id = order.orderId();
 
     std::unique_lock<std::shared_mutex> lock(m_mutex);
 
     if (m_orders.find(id) == m_orders.end())
     {
         updateAggregateAdd(order);
-        m_orders.emplace(std::move(id), std::move(order));
+
+        if (m_redisClient)
+        {
+            m_redisClient->saveOrder(order);
+        }
+
+        m_orders.emplace(id, std::move(order));
     }
 }
 
@@ -64,6 +80,12 @@ void OrderCache::cancelOrder(const std::string& orderId)
     if (it != m_orders.end())
     {
         updateAggregateRemove(it->second);
+
+        if (m_redisClient)
+        {
+            m_redisClient->removeOrder(orderId);
+        }
+
         m_orders.erase(it);
     }
 }
@@ -82,6 +104,12 @@ void OrderCache::cancelOrdersForUser(const std::string& user)
         if (it->second.user() == user)
         {
             updateAggregateRemove(it->second);
+
+            if (m_redisClient)
+            {
+                m_redisClient->removeOrder(it->first);
+            }
+
             it = m_orders.erase(it);
         }
         else
@@ -105,6 +133,12 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
         if (it->second.qty() >= minQty && it->second.securityId() == securityId)
         {
             updateAggregateRemove(it->second);
+
+            if (m_redisClient)
+            {
+                m_redisClient->removeOrder(it->first);
+            }
+
             it = m_orders.erase(it);
         }
         else
@@ -138,11 +172,7 @@ unsigned int OrderCache::getMatchingSizeForSecurity(const std::string& securityI
 
     std::uint64_t matchable = cap;
 
-    // Closed-form O(K) bipartite matching bound (Hall's Marriage Theorem / Min-Cut):
-    // Since orders from the same company cannot match against each other, the maximum
-    // matchable volume is bounded by min(totalBuyQty, totalSellQty) and, for every
-    // company C, by the total volume available outside of C:
-    //   (totalBuyQty - buyQty[C]) + (totalSellQty - sellQty[C]).
+    // Closed-form O(K) bipartite matching bound (Hall's Marriage Theorem / Min-Cut)
     for (const auto& [company, volume] : aggregate.companyVolumes)
     {
         const std::uint64_t outsideBuys = aggregate.totalBuyQty - volume.buyQty;
@@ -173,6 +203,34 @@ std::vector<Order> OrderCache::getAllOrders() const
     }
 
     return result;
+}
+
+void OrderCache::loadFromRedis()
+{
+    if (!m_redisClient)
+    {
+        return;
+    }
+
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+
+    m_orders.clear();
+    m_securityAggregates.clear();
+
+    const auto orderIds = m_redisClient->getAllOrderIds();
+
+    for (const auto& orderId : orderIds)
+    {
+        auto orderOpt = m_redisClient->getOrder(orderId);
+        if (orderOpt.has_value())
+        {
+            // Bind as mutable rvalue reference to prevent deep string copies
+            Order order = std::move(*orderOpt);
+            updateAggregateAdd(order);
+            const std::string id = order.orderId();
+            m_orders.emplace(id, std::move(order));
+        }
+    }
 }
 
 // -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=- Private Methods -=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-=-
