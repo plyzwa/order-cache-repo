@@ -1,4 +1,5 @@
 #include "OrderCache.h"
+#include <RedisClient.h>
 
 #include <vector>
 #include <algorithm>
@@ -25,6 +26,12 @@ static bool isValid(const Order& order)
     return order.side() == BUY || order.side() == SELL;
 }
 
+OrderCache::OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting)
+    : m_redisClient(std::move(redisClient))
+    {
+        if (m_redisClient && loadExisting) loadFromRedis();
+    }
+
 void OrderCache::addOrder(Order order)
 {
     // It is better to have isValid to be first to improve performance
@@ -34,6 +41,9 @@ void OrderCache::addOrder(Order order)
     if (m_orders.find(order.orderId()) == m_orders.end() ) 
     {
         updateAggregateAdd(order);
+
+        if (m_redisClient) m_redisClient->saveOrder(order);
+
         auto id = order.orderId();
         m_orders.emplace(std::move(id), std::move(order));
     }
@@ -49,6 +59,8 @@ void OrderCache::cancelOrder(const std::string& orderId)
     {
         updateAggregateRemove(it->second);
         m_orders.erase(it);
+
+        if (m_redisClient) m_redisClient->removeOrder(orderId);
     }
 
 }
@@ -64,7 +76,10 @@ void OrderCache::cancelOrdersForUser(const std::string& user)
         if (it->second.user() == user)
         {
             updateAggregateRemove(it->second);
+
+            if (m_redisClient) m_redisClient->removeOrder(it->first);
             it = m_orders.erase(it);
+
         }
         else
         {
@@ -85,6 +100,8 @@ void OrderCache::cancelOrdersForSecIdWithMinimumQty(const std::string& securityI
         if (it->second.securityId() == securityId &&  it->second.qty() >= minQty)
         {
             updateAggregateRemove(it->second);
+            
+            if (m_redisClient) m_redisClient->removeOrder(it->first);
             it = m_orders.erase(it);
         }
         else
@@ -142,6 +159,32 @@ std::vector<Order> OrderCache::getAllOrders() const
 
     return result;
 
+}
+
+void OrderCache::loadFromRedis()
+{
+    if (!m_redisClient) return;
+
+    std::unique_lock<std::shared_mutex> lock(m_mutex);
+    
+    // Clear current state before loading
+    m_orders.clear();
+    m_securityAggregates.clear();
+
+    // Fetch all active order keys from Redis using SCAN or KEYS
+    // (Assuming we add a helper in RedisClient or query keys directly)
+    const auto& orderIds = m_redisClient->getAllOrderIds(); // We can define this helper in RedisClient
+    
+    for (const auto& orderId : orderIds)
+    {
+        auto orderOpt = m_redisClient->getOrder(orderId);
+        if (orderOpt.has_value())
+        {
+            Order& order = *orderOpt;
+            updateAggregateAdd(order);
+            m_orders.emplace(order.orderId(), std::move(order));
+        }
+    }
 }
 
 
