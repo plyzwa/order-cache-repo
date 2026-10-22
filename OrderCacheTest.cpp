@@ -23,13 +23,13 @@ protected:
     }
 };
 
-// ====================================== PHASE 1 STEP0 ======================================
+/* ============================= PHASE1 STEP0: INITIAL TEST ============================= */
 TEST_F(OrderCacheTest, ExampleAddOrder)
 {
     cache.addOrder(Order{"OrdId1", "SecId1", "Buy", 1000, "User1", "CompanyA"});
     ASSERT_EQ(cache.getAllOrders().size(), 1);}
 
-// ====================================== PHASE 1 STEP1 ======================================
+/* ============================= PHASE1 STEP1: BASIC CRUD ============================= */
 TEST_F(OrderCacheTest, AddAndRetrieveSingleOrder)
 {
     cache.addOrder(Order{"OrdId1", "SecId1", "Buy", 1000, "User1", "CompanyA"});
@@ -66,7 +66,7 @@ TEST_F(OrderCacheTest, CancelNonExistingOrder)
     ASSERT_EQ(cache.getAllOrders().size(), 3);
 }
 
-// ====================================== PHASE 1 STEP2 ======================================
+/* ============================= PHASE1 STEP2: CLEANUP ============================= */
 
 TEST_F(OrderCacheTest, CancelOrdersForUser_RemovesOnlyTargetUser)
 {
@@ -124,7 +124,7 @@ TEST_F(OrderCacheTest, CancelOrdersForSecIdWithMinimumQty_NonExistentSecurityIsN
     EXPECT_EQ(cache.getAllOrders().size(), 1);
 }
 
-// ====================================== PHASE 2 STEP3 ======================================
+/* ============================= PHASE2 STEP3: NAIVE GREEDY ALGORITHM ============================= */
 
 TEST_F(OrderCacheTest, Matching_ReadmeExample1)
 {
@@ -185,7 +185,7 @@ TEST_F(OrderCacheTest, Matching_ReadmeExample3)
     EXPECT_EQ(cache.getMatchingSizeForSecurity("SecId3"), 0);
 }
 
-// ====================================== PHASE 2 STEP4 ======================================
+/* ============================= PHASE2 STEP4: EDGE CASSES ============================= */
 
 TEST_F(OrderCacheTest, Matching_EmptyAndNonExistentSecurity)
 {
@@ -263,7 +263,7 @@ TEST_F(OrderCacheTest, AddOrder_ReAddAfterCancelSucceeds)
     EXPECT_EQ(orders[0].qty(), 999);
 }
 
-// ====================================== PHASE 3 STEP5 ======================================
+/* ============================= PHASE 3 STEP5: OPTIMISATION ============================= */
 
 TEST_F(OrderCacheTest, Matching_ScalesEfficientlyWithLargeOrderVolume)
 {
@@ -361,7 +361,7 @@ TEST_F(OrderCacheTest, Benchmark_QueryLatencyUnderHeavyLoad)
     EXPECT_LT(durationNs, 100'000); 
 }
 
-// ====================================== PHASE 4 STEP6 ======================================
+/* ============================= PHASE 4 STEP6: THREAD SAFETY ============================= */
 
 TEST_F(OrderCacheTest, Concurrency_ConcurrentWritersDisjointKeys)
 {
@@ -455,7 +455,7 @@ TEST_F(OrderCacheTest, Concurrency_SimultaneousReadersAndWriters)
     EXPECT_NO_THROW(cache.getAllOrders());
 }
 
-// ====================================== PHASE 5 STEP7 ======================================
+/* ============================= PHASE5 STEP7: COMPREHENSIVE TESTS ============================= */
 
 TEST_F(OrderCacheTest, Scale_OneMillionOrdersStressBenchmark)
 {
@@ -543,7 +543,7 @@ TEST_F(OrderCacheTest, OverflowProtection_HandlesLargeInstitutionalVolumesWithou
     EXPECT_EQ(cache.getMatchingSizeForSecurity("CorpBond10Y"), 3'000'000'000U);
 }
 
-// ====================================== PHASE 6 STEP8 (PROTOBUF) ======================================
+/* ============================= PHASE6 STEP8: PROTOBUFFER ============================= */
 
 TEST_F(OrderCacheTest, ProtobufSerializationRoundTrip)
 {
@@ -563,7 +563,7 @@ TEST_F(OrderCacheTest, ProtobufSerializationRoundTrip)
 TEST_F(OrderCacheTest, ProtobufSerialization_EdgeCasesAndSpecialCharacters)
 {
     // Test with maximum 32-bit quantity, long strings, and special characters
-    Order original
+    const Order original
     {
         "Ord_999999", 
         "USD/EUR-10Y", 
@@ -612,7 +612,7 @@ TEST_F(OrderCacheTest, ProtobufDeserialization_EmptyPayloadYieldsDefaultOrder)
     EXPECT_EQ(defaultOrder.side(), "Unspecified");
 }
 
-// ====================================== PHASE7 STEP9 : FLATBUFFERS ======================================
+/* ============================= PHASE7 STEP9: FLATBUFFER ============================= */
 
 TEST_F(OrderCacheTest, FlatBuffers_RoundTripParity)
 {
@@ -655,7 +655,7 @@ TEST_F(OrderCacheTest, FlatBuffers_ZeroCopyDirectInspection)
 TEST_F(OrderCacheTest, FlatBuffers_RejectsCorruptedAndTruncatedBuffers)
 {
     const Order original{"Ord_Trunc", "Sec_AAPL", "Buy", 100, "User1", "CompA"};
-    auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(original);
+    const auto buffer = FlatBuff::OrderFlatBufferAdapter::serialize(original);
 
     // 1. Null / zero-sized buffer validation
     EXPECT_THROW(FlatBuff::OrderFlatBufferAdapter::verifyAndAccess(nullptr, 0), std::invalid_argument);
@@ -715,11 +715,11 @@ TEST_F(OrderCacheTest, Serialization_ProtobufAndFlatBuffersParity)
 }
 
 
-// ====================================== PHASE 8 STEP10 : REDIS PERSISTENCE ======================================
+/* ============================= PHASE8 STEP10: REDIS ============================= */
 
 TEST_F(OrderCacheTest, RedisPersistence_AddAndCancelSyncsWithRedis)
 {
-    auto redisClient = std::make_shared<Redis::RedisClient>();
+    const auto redisClient = std::make_shared<Redis::RedisClient>();
     if (!redisClient->ping())
     {
         GTEST_SKIP() << "Skipping Redis persistence test: local redis-server not running on port 6379.";
@@ -736,7 +736,7 @@ TEST_F(OrderCacheTest, RedisPersistence_AddAndCancelSyncsWithRedis)
     ASSERT_EQ(redisCache.getAllOrders().size(), 1);
 
     // Verify it was durably written to Redis
-    auto retrievedOrder = redisClient->getOrder("RedisOrd_101");
+    const auto retrievedOrder = redisClient->getOrder("RedisOrd_101");
     ASSERT_TRUE(retrievedOrder.has_value());
     EXPECT_EQ(retrievedOrder->orderId(), "RedisOrd_101");
     EXPECT_EQ(retrievedOrder->securityId(), "SecRedis");
@@ -752,7 +752,7 @@ TEST_F(OrderCacheTest, RedisPersistence_AddAndCancelSyncsWithRedis)
 
 TEST_F(OrderCacheTest, RedisPersistence_StartupHydrationRecoversState)
 {
-    auto redisClient = std::make_shared<Redis::RedisClient>();
+    const auto redisClient = std::make_shared<Redis::RedisClient>();
     if (!redisClient->ping())
     {
         GTEST_SKIP() << "Skipping Redis hydration test: local redis-server not running on port 6379.";
@@ -779,8 +779,6 @@ TEST_F(OrderCacheTest, RedisPersistence_StartupHydrationRecoversState)
     redisClient->removeOrder("Hydrate_1");
     redisClient->removeOrder("Hydrate_2");
 }
-
-
 
 
 int main(int argc, char **argv)

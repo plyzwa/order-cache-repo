@@ -28,9 +28,9 @@ static bool isValid(const Order& order)
 
 OrderCache::OrderCache(std::shared_ptr<Redis::RedisClient> redisClient, const bool loadExisting)
     : m_redisClient(std::move(redisClient))
-    {
-        if (m_redisClient && loadExisting) loadFromRedis();
-    }
+{
+    if (m_redisClient && loadExisting) loadFromRedis();
+}
 
 void OrderCache::addOrder(Order order)
 {
@@ -62,7 +62,6 @@ void OrderCache::cancelOrder(const std::string& orderId)
 
         if (m_redisClient) m_redisClient->removeOrder(orderId);
     }
-
 }
 
 void OrderCache::cancelOrdersForUser(const std::string& user)
@@ -167,20 +166,17 @@ void OrderCache::loadFromRedis()
 
     std::unique_lock<std::shared_mutex> lock(m_mutex);
     
-    // Clear current state before loading
     m_orders.clear();
     m_securityAggregates.clear();
 
-    // Fetch all active order keys from Redis using SCAN or KEYS
-    // (Assuming we add a helper in RedisClient or query keys directly)
-    const auto& orderIds = m_redisClient->getAllOrderIds(); // We can define this helper in RedisClient
+    const auto& orderIds = m_redisClient->getAllOrderIds();
     
     for (const auto& orderId : orderIds)
     {
-        auto orderOpt = m_redisClient->getOrder(orderId);
+        const auto orderOpt = m_redisClient->getOrder(orderId);
         if (orderOpt.has_value())
         {
-            Order& order = *orderOpt;
+            const Order& order = *orderOpt;
             updateAggregateAdd(order);
             m_orders.emplace(order.orderId(), std::move(order));
         }

@@ -19,9 +19,8 @@ namespace Protobuff
 namespace FlatBuff
 {
 
-
-    class OrderFlatBufferAdapter
-    {
+class OrderFlatBufferAdapter
+{
 
     public:
     
@@ -35,6 +34,4 @@ namespace FlatBuff
     static Order deserialize(const uint8_t* buffer, const size_t size);
 };
 
-
-
-}
+} // FlatBuff

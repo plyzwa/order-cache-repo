@@ -24,9 +24,9 @@ struct BenchmarkResult
 BenchmarkResult benchmarkIngestion(const std::size_t orderCount);
 BenchmarkResult benchmarkQueryLatency(const std::size_t bookSize, const std::size_t iterations);
 
-void printBenchmarkResult(const BenchmarkResult& res);
-void printBenchmarkHeader();
-void printBenchmarkFooter();
+static void printBenchmarkResult(const BenchmarkResult& res);
+static void printBenchmarkHeader();
+static void printBenchmarkFooter();
 
 
 
