@@ -1,4 +1,10 @@
 cmake_minimum_required(VERSION 3.10)
+
+# Default build type to Release if not specified so performance tests run with optimizations
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE "Release" CACHE STRING "Choose build type: Debug or Release." FORCE)
+endif()
+
 project(OrderCache VERSION 1.0 LANGUAGES CXX)
 
 # Set C++ standard to C++17 as required by the assignment
@@ -13,12 +19,11 @@ option(ENABLE_ASAN "Enable Address and Undefined Behavior Sanitizers" OFF)
 # Add compiler flags for optimization in Release mode
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
   if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} -O3 -DNDEBUG")
   elseif(MSVC)
-    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2")
+    set(CMAKE_CXX_FLAGS_RELEASE "${CMAKE_CXX_FLAGS_RELEASE} /O2 /DNDEBUG")
   endif()
 endif()
-
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   if(ENABLE_TSAN)
@@ -30,12 +35,8 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
   endif()
 endif()
 
-
-# Find Google Test package
+# Find Google Test and Thread packages
 find_package(GTest REQUIRED)
-include_directories(${GTEST_INCLUDE_DIRS})
-
-# Add thread support (needed for Google Test)
 find_package(Threads REQUIRED)
 
 # Source files
@@ -47,8 +48,13 @@ set(SOURCES
 # Add the executable
 add_executable(OrderCacheTest ${SOURCES})
 
-# Link against Google Test and pthread
-target_link_libraries(OrderCacheTest
+target_include_directories(OrderCacheTest PRIVATE
+    ${GTEST_INCLUDE_DIRS}
+    ${CMAKE_CURRENT_SOURCE_DIR}
+)
+
+# Link against Google Test and Threads
+target_link_libraries(OrderCacheTest PRIVATE
     ${GTEST_BOTH_LIBRARIES}
     Threads::Threads
 )
